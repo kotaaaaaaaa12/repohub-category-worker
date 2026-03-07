@@ -1,0 +1,13 @@
+name = "repohub-category-worker"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# KV Namespace binding
+# デプロイ後に `wrangler kv:namespace create CATEGORY_CACHE` で作成して
+# 下のid欄を置き換えること
+[[kv_namespaces]]
+binding = "CATEGORY_CACHE"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# ローカル開発用（wrangler dev で使うプレビューID）
+# preview_id = "REPLACE_WITH_YOUR_PREVIEW_KV_ID"
