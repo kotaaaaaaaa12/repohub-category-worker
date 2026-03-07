@@ -7,7 +7,7 @@ compatibility_date = "2024-01-01"
 # 下のid欄を置き換えること
 [[kv_namespaces]]
 binding = "CATEGORY_CACHE"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+id = "c17a740fb56149d191c1e57ef0ee911f"
 
 # ローカル開発用（wrangler dev で使うプレビューID）
 # preview_id = "REPLACE_WITH_YOUR_PREVIEW_KV_ID"
