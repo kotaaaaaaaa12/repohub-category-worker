@@ -17,15 +17,15 @@ const FETCH_TIMEOUT = 8000;
 
 export default {
 async fetch(request, env, ctx) {
-if (request.method === ‘OPTIONS’) return corsResp(’’, 204);
+if (request.method === “OPTIONS”) return corsResp(””, 204);
 
 ```
 const url = new URL(request.url);
 
 // GET /category?bundleId=xxx
-if (url.pathname === '/category' && request.method === 'GET') {
-  const bundleId = url.searchParams.get('bundleId');
-  if (!bundleId) return corsResp(JSON.stringify({ error: 'bundleId required' }), 400);
+if (url.pathname === "/category" && request.method === "GET") {
+  const bundleId = url.searchParams.get("bundleId");
+  if (!bundleId) return corsResp(JSON.stringify({ error: "bundleId required" }), 400);
 
   const cacheKey = new Request(request.url, request);
   const edgeCached = await caches.default.match(cacheKey);
@@ -38,22 +38,22 @@ if (url.pathname === '/category' && request.method === 'GET') {
 }
 
 // POST /batch  { bundleIds: [...] }
-if (url.pathname === '/batch' && request.method === 'POST') {
+if (url.pathname === "/batch" && request.method === "POST") {
   let body;
   try { body = await request.json(); }
-  catch { return corsResp(JSON.stringify({ error: 'Invalid JSON' }), 400); }
+  catch { return corsResp(JSON.stringify({ error: "Invalid JSON" }), 400); }
 
   const raw = body.bundleIds;
   if (!Array.isArray(raw) || raw.length === 0)
-    return corsResp(JSON.stringify({ error: 'bundleIds[] required' }), 400);
+    return corsResp(JSON.stringify({ error: "bundleIds[] required" }), 400);
   if (raw.length > 1000)
-    return corsResp(JSON.stringify({ error: 'Max 1000 bundleIds' }), 400);
+    return corsResp(JSON.stringify({ error: "Max 1000 bundleIds" }), 400);
 
   const result = await getBatch(raw, env, ctx);
   return corsResp(JSON.stringify(result), 200, EDGE_TTL);
 }
 
-return corsResp(JSON.stringify({ error: 'Not found' }), 404);
+return corsResp(JSON.stringify({ error: "Not found" }), 404);
 ```
 
 }
@@ -62,12 +62,12 @@ return corsResp(JSON.stringify({ error: 'Not found' }), 404);
 // ── 単体取得 ─────────────────────────────────────────────────────
 async function getSingle(bundleId, env) {
 const kv = await env.CATEGORY_CACHE.get(`cat:${bundleId}`);
-if (kv !== null) return { bundleId, category: kv, source: ‘cache’ };
+if (kv !== null) return { bundleId, category: kv, source: “cache” };
 
 const map = await itunesBulkLookup([bundleId]);
-const cat = map[bundleId] ?? ‘Unknown’;
+const cat = map[bundleId] ?? “Unknown”;
 await env.CATEGORY_CACHE.put(`cat:${bundleId}`, cat, { expirationTtl: KV_TTL });
-return { bundleId, category: cat, source: ‘itunes’ };
+return { bundleId, category: cat, source: “itunes” };
 }
 
 // ── バッチ取得 ────────────────────────────────────────────────────
@@ -97,7 +97,7 @@ for (const m of results) Object.assign(freshMap, m);
 ```
 // iTunes にも存在しなかったものは Unknown
 for (const id of missIds) {
-  if (!(id in freshMap)) freshMap[id] = 'Unknown';
+  if (!(id in freshMap)) freshMap[id] = "Unknown";
 }
 
 // 4. KV に非同期保存
@@ -116,8 +116,8 @@ ctx.waitUntil(
 const result = {};
 for (const id of ids) {
 result[id] = {
-category: hitMap[id] ?? freshMap[id] ?? ‘Unknown’,
-source:   id in hitMap ? ‘cache’ : ‘itunes’,
+category: hitMap[id] ?? freshMap[id] ?? “Unknown”,
+source:   id in hitMap ? “cache” : “itunes”,
 };
 }
 return result;
@@ -128,13 +128,13 @@ async function itunesBulkLookup(ids) {
 const map = {};
 if (!ids.length) return map;
 try {
-const query  = ids.map(encodeURIComponent).join(’,’);
+const query  = ids.map(encodeURIComponent).join(”,”);
 const apiUrl = `https://itunes.apple.com/lookup?bundleId=${query}&country=us&limit=${ids.length}`;
 const controller = new AbortController();
 const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 const res = await fetch(apiUrl, {
 signal: controller.signal,
-headers: { ‘User-Agent’: ‘RepoHub/2.0’ }
+headers: { “User-Agent”: “RepoHub/2.0” }
 });
 clearTimeout(timer);
 if (!res.ok) return map;
@@ -159,13 +159,13 @@ function corsResp(body, status = 200, edgeTtl = 0) {
 return new Response(body, {
 status,
 headers: {
-‘Content-Type’: ‘application/json’,
-‘Access-Control-Allow-Origin’: ‘*’,
-‘Access-Control-Allow-Methods’: ‘GET, POST, OPTIONS’,
-‘Access-Control-Allow-Headers’: ‘Content-Type’,
-‘Cache-Control’: edgeTtl > 0
+“Content-Type”: “application/json”,
+“Access-Control-Allow-Origin”: “*”,
+“Access-Control-Allow-Methods”: “GET, POST, OPTIONS”,
+“Access-Control-Allow-Headers”: “Content-Type”,
+“Cache-Control”: edgeTtl > 0
 ? `public, max-age=${edgeTtl}, s-maxage=${edgeTtl}`
-: ‘no-store’,
+: “no-store”,
 }
 });
 }
