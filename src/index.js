@@ -1,6 +1,7 @@
 const KV_TTL = 60 * 60 * 24 * 30;
 const EDGE_TTL = 86400;
 const ITUNES_CHUNK = 200;
+const KV_READ_CHUNK = 100; // KVのバースト制限対策
 const FETCH_TIMEOUT = 8000;
 
 export default {
@@ -53,20 +54,23 @@ export default {
       return resp;
     }
 
-    // POST /batch  { bundleIds: [...] }
-    if (url.pathname === "/batch" && request.method === "POST") {
-      let body;
-      try { body = await request.json(); }
-      catch { return corsResp(JSON.stringify({ error: "Invalid JSON" }), 400); }
+    // GET /batch?ids=com.a,com.b,com.c
+    if (url.pathname === "/batch" && request.method === "GET") {
+      const raw = (url.searchParams.get("ids") || "").split(",").map(s => s.trim()).filter(Boolean);
+      if (raw.length === 0)
+        return corsResp(JSON.stringify({ error: "ids required" }), 400);
+      if (raw.length > 2000)
+        return corsResp(JSON.stringify({ error: "Max 2000 ids" }), 400);
 
-      const raw = body.bundleIds;
-      if (!Array.isArray(raw) || raw.length === 0)
-        return corsResp(JSON.stringify({ error: "bundleIds[] required" }), 400);
-      if (raw.length > 1000)
-        return corsResp(JSON.stringify({ error: "Max 1000 bundleIds" }), 400);
+      // Edge Cacheチェック
+      const cacheKey = new Request(request.url, { method: "GET" });
+      const edgeCached = await caches.default.match(cacheKey);
+      if (edgeCached) return edgeCached;
 
       const result = await getBatch(raw, env, ctx);
-      return corsResp(JSON.stringify(result), 200, EDGE_TTL);
+      const resp = corsResp(JSON.stringify(result), 200, EDGE_TTL);
+      ctx.waitUntil(caches.default.put(cacheKey, resp.clone()));
+      return resp;
     }
 
     return corsResp(JSON.stringify({ error: "Not found" }), 404);
@@ -86,17 +90,20 @@ async function getSingle(bundleId, env) {
 async function getBatch(rawIds, env, ctx) {
   const ids = [...new Set(rawIds.filter(Boolean))];
 
-  const kvResults = await Promise.all(
-    ids.map(function(id) {
-      return env.CATEGORY_CACHE.get("cat:" + id).then(function(v) { return { id: id, v: v }; });
-    })
-  );
-
+  // KVをチャンクで読む（並列しすぎるとレートリミットにかかる）
   const hitMap = {};
   const missIds = [];
-  for (const item of kvResults) {
-    if (item.v !== null) hitMap[item.id] = item.v;
-    else missIds.push(item.id);
+  for (let i = 0; i < ids.length; i += KV_READ_CHUNK) {
+    const chunk = ids.slice(i, i + KV_READ_CHUNK);
+    const kvResults = await Promise.all(
+      chunk.map(function(id) {
+        return env.CATEGORY_CACHE.get("cat:" + id).then(function(v) { return { id: id, v: v }; });
+      })
+    );
+    for (const item of kvResults) {
+      if (item.v !== null) hitMap[item.id] = item.v;
+      else missIds.push(item.id);
+    }
   }
 
   const freshMap = {};
