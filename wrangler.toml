@@ -1,0 +1,7 @@
+name = "repohub-category-worker"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "CATEGORY_CACHE"
+id = "c17a740fb56149d191c1e57ef0ee911f"
