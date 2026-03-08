@@ -9,6 +9,36 @@ export default {
 
     const url = new URL(request.url);
 
+    // GET /fetch?url=xxx  repo JSONのプロキシ
+    if (url.pathname === "/fetch" && request.method === "GET") {
+      const target = url.searchParams.get("url");
+      if (!target) return corsResp(JSON.stringify({ error: "url required" }), 400);
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(function() { controller.abort(); }, 12000);
+        const res = await fetch(target, {
+          signal: controller.signal,
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; RepoHub/2.0)",
+            "Accept": "application/json, text/plain, */*"
+          }
+        });
+        clearTimeout(timer);
+        const text = await res.text();
+        return new Response(text, {
+          status: res.status,
+          headers: {
+            "Content-Type": res.headers.get("Content-Type") || "text/plain",
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=300"
+          }
+        });
+      } catch(e) {
+        return corsResp(JSON.stringify({ error: e.message }), 502);
+      }
+    }
+
+    // GET /category?bundleId=xxx
     if (url.pathname === "/category" && request.method === "GET") {
       const bundleId = url.searchParams.get("bundleId");
       if (!bundleId) return corsResp(JSON.stringify({ error: "bundleId required" }), 400);
@@ -23,6 +53,7 @@ export default {
       return resp;
     }
 
+    // POST /batch  { bundleIds: [...] }
     if (url.pathname === "/batch" && request.method === "POST") {
       let body;
       try { body = await request.json(); }
