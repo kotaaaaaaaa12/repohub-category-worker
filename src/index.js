@@ -3,6 +3,7 @@ const EDGE_TTL = 86400;
 const ITUNES_CHUNK = 200;
 const KV_READ_CHUNK = 100; // KVのバースト制限対策
 const FETCH_TIMEOUT = 8000;
+// DISCORD_WEBHOOK は env.DISCORD_WEBHOOK (Cloudflare Secret) から取得
 
 export default {
   async fetch(request, env, ctx) {
@@ -71,6 +72,49 @@ export default {
       const resp = corsResp(JSON.stringify(result), 200, EDGE_TTL);
       ctx.waitUntil(caches.default.put(cacheKey, resp.clone()));
       return resp;
+    }
+
+    // POST /report-repo  ユーザー追加repoをDiscordに通知
+    if (url.pathname === "/report-repo" && request.method === "POST") {
+      try {
+        const body = await request.json();
+        const repoUrl = (body.url || "").trim();
+        if (!repoUrl) return corsResp(JSON.stringify({ error: "url required" }), 400);
+        try { new URL(repoUrl); } catch { return corsResp(JSON.stringify({ error: "invalid url" }), 400); }
+
+        // レート制限: 同じURLは1日1回まで通知
+        const ratioKey = "report:" + repoUrl;
+        const already = await env.CATEGORY_CACHE.get(ratioKey);
+        if (already) return corsResp(JSON.stringify({ ok: true, note: "already reported" }), 200);
+        await env.CATEGORY_CACHE.put(ratioKey, "1", { expirationTtl: 86400 });
+
+        const cf = request.cf || {};
+        const country = cf.country || "??";
+        const msg = {
+          embeds: [{
+            title: "📦 New Repo Submitted",
+            color: 0x6c63ff,
+            fields: [
+              { name: "URL", value: "`" + repoUrl + "`", inline: false },
+              { name: "Country", value: country, inline: true },
+              { name: "Time", value: new Date().toUTCString(), inline: true }
+            ],
+            footer: { text: "RepoHub User Submission" }
+          }]
+        };
+        const webhookUrl = env.DISCORD_WEBHOOK;
+        if (!webhookUrl) return corsResp(JSON.stringify({ ok: true, note: 'webhook not configured' }), 200);
+        ctx.waitUntil(
+          fetch(webhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(msg)
+          })
+        );
+        return corsResp(JSON.stringify({ ok: true }), 200);
+      } catch(e) {
+        return corsResp(JSON.stringify({ error: e.message }), 500);
+      }
     }
 
     return corsResp(JSON.stringify({ error: "Not found" }), 404);
